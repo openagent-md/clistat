@@ -28,6 +28,15 @@ func (*Statter) Disk(p Prefix, path string) (*Result, error) {
 	return &r, nil
 }
 
+// devIno uniquely identifies a file across filesystems.
+// Inodes are only unique within a single filesystem, so we need
+// to include the device ID to handle directory trees that span
+// multiple mount points.
+type devIno struct {
+	Dev uint64
+	Ino uint64
+}
+
 // DiskUsage returns the actual disk usage of a directory tree,
 // similar to "du -sh". This is useful in containerized environments
 // where you want to track usage of specific directories rather than
@@ -36,18 +45,27 @@ func (*Statter) Disk(p Prefix, path string) (*Result, error) {
 // Unlike Disk(), which uses statfs to get filesystem-level usage,
 // DiskUsage walks the directory tree and sums up file sizes.
 //
+// Symlinks are not followed to avoid counting files outside the
+// target directory and to prevent infinite loops from symlink cycles.
+//
+// Hard links are handled by tracking (device, inode) pairs to avoid
+// double-counting files that have multiple directory entries.
+//
 // Note: This operation can be expensive for large directory trees
 // with many small files. Consider using appropriate refresh intervals.
+// Files that cannot be accessed (permission errors, etc.) are skipped
+// silently.
 func (*Statter) DiskUsage(p Prefix, path string) (*Result, error) {
 	if path == "" {
 		path = "/"
 	}
 
 	var totalSize int64
-	// Track visited inodes to avoid double-counting hard links
-	visited := make(map[uint64]struct{})
+	// Track visited (device, inode) pairs to avoid double-counting hard links.
+	// We use both device and inode because inodes are only unique per-filesystem.
+	visited := make(map[devIno]struct{})
 
-	err := filepath.WalkDir(path, func(filePath string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// Skip files/directories we can't access
 			return nil
@@ -58,6 +76,14 @@ func (*Statter) DiskUsage(p Prefix, path string) (*Result, error) {
 			return nil
 		}
 
+		// Skip symlinks to avoid:
+		// 1. Counting files outside the target directory
+		// 2. Infinite loops from symlink cycles
+		// 3. Double-counting if symlink target is also in the tree
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
+
 		info, err := d.Info()
 		if err != nil {
 			return nil
@@ -65,11 +91,12 @@ func (*Statter) DiskUsage(p Prefix, path string) (*Result, error) {
 
 		// Get the underlying syscall.Stat_t to check for hard links
 		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-			// Skip if we've already counted this inode (hard link)
-			if _, seen := visited[stat.Ino]; seen {
+			// Skip if we've already counted this (device, inode) pair (hard link)
+			key := devIno{Dev: uint64(stat.Dev), Ino: stat.Ino}
+			if _, seen := visited[key]; seen {
 				return nil
 			}
-			visited[stat.Ino] = struct{}{}
+			visited[key] = struct{}{}
 			// Use actual disk blocks allocated (accounts for sparse files)
 			totalSize += stat.Blocks * 512 // Blocks are always 512-byte units
 		} else {
@@ -117,7 +144,7 @@ func (s *Statter) DiskUsageWithTotal(p Prefix, path string) (*Result, error) {
 
 // DiskUsageSimple returns the actual disk usage of a directory tree
 // using only file sizes (not disk blocks). This is faster but less
-// accurate for sparse files.
+// accurate for sparse files. Symlinks are skipped.
 func (*Statter) DiskUsageSimple(p Prefix, path string) (*Result, error) {
 	if path == "" {
 		path = "/"
@@ -131,6 +158,11 @@ func (*Statter) DiskUsageSimple(p Prefix, path string) (*Result, error) {
 		}
 
 		if d.IsDir() {
+			return nil
+		}
+
+		// Skip symlinks
+		if d.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
 

@@ -46,8 +46,13 @@ func (*Statter) Disk(p Prefix, path string) (*Result, error) {
 // Unlike Disk(), which uses GetDiskFreeSpaceEx to get filesystem-level usage,
 // DiskUsage walks the directory tree and sums up file sizes.
 //
+// Symlinks are not followed to avoid counting files outside the
+// target directory and to prevent infinite loops from symlink cycles.
+//
 // Note: This operation can be expensive for large directory trees
 // with many small files. Consider using appropriate refresh intervals.
+// Files that cannot be accessed (permission errors, etc.) are skipped
+// silently.
 func (*Statter) DiskUsage(p Prefix, path string) (*Result, error) {
 	if path == "" {
 		path = `C:\`
@@ -63,6 +68,14 @@ func (*Statter) DiskUsage(p Prefix, path string) (*Result, error) {
 
 		// Skip directories themselves, we only count file sizes
 		if d.IsDir() {
+			return nil
+		}
+
+		// Skip symlinks to avoid:
+		// 1. Counting files outside the target directory
+		// 2. Infinite loops from symlink cycles
+		// 3. Double-counting if symlink target is also in the tree
+		if d.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
 
