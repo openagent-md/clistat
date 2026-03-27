@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"cdr.dev/slog/v3"
+	"dev.latticeruntime.com/slog/v3"
 	"github.com/elastic/go-sysinfo"
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
