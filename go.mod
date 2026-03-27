@@ -1,4 +1,4 @@
-module github.com/coder/clistat
+module github.com/openagent-md/clistat
 
 go 1.23.1
 

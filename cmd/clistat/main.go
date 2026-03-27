@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/coder/clistat"
+	"github.com/openagent-md/clistat"
 )
 
 func main() {
