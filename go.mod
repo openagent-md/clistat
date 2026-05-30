@@ -3,7 +3,6 @@ module github.com/openagent-md/clistat
 go 1.23.1
 
 require (
-	dev.latticeruntime.com/slog/v3 v3.0.1-rc1
 	github.com/elastic/go-sysinfo v1.15.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/spf13/afero v1.12.0
@@ -17,6 +16,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/elastic/go-windows v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/openagent-md/slog/v3 v3.0.0-20260530084309-de33bf70e2e4
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
